@@ -15,6 +15,8 @@ interface InstanceState {
   updateInstance: (instance: ContractInstance) => Promise<void>;
   deleteInstance: (id: string) => Promise<void>;
   setInstanceStatus: (id: string, status: ContractStatus) => Promise<void>;
+  /** 仅更新内存状态：变量重命名已在同一事务中落库，这里同步迁移后的草稿实例。 */
+  applyMigratedInstances: (migrated: ContractInstance[]) => void;
 }
 
 function sortInstances(instances: ContractInstance[]) {
@@ -89,5 +91,16 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     }
 
     await get().updateInstance({ ...instance, status });
+  },
+
+  applyMigratedInstances(migrated) {
+    if (!migrated.length) {
+      return;
+    }
+
+    const migratedById = new Map(migrated.map((instance) => [instance.id, instance]));
+    set((state) => ({
+      instances: sortInstances(state.instances.map((item) => migratedById.get(item.id) ?? item))
+    }));
   }
 }));

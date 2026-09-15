@@ -4,12 +4,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { RichEditor } from '../components/common';
 import { ClauseDrawer } from '../components/editor/ClauseDrawer';
+import { RenameVariableModal } from '../components/editor/RenameVariableModal';
 import { VariablePanel } from '../components/editor/VariablePanel';
 import { useHistory } from '../hooks/useHistory';
 import { useClauseStore } from '../stores/clause';
 import { useTemplateStore } from '../stores/template';
 import { TemplateCategory, TEMPLATE_CATEGORY_LABELS } from '../types/enums';
-import { Template } from '../types/template';
+import { Template, TemplateVariable } from '../types/template';
 
 const categoryOptions = Object.values(TemplateCategory).map((value) => ({
   label: TEMPLATE_CATEGORY_LABELS[value],
@@ -21,6 +22,7 @@ export function TemplateEditor() {
   const navigate = useNavigate();
   const [draft, setDraft] = useState<Template | undefined>();
   const [clauseDrawerVisible, setClauseDrawerVisible] = useState(false);
+  const [renamingVariable, setRenamingVariable] = useState<TemplateVariable | null>(null);
   const contentHistory = useHistory('');
   const { templates, loadTemplates, createTemplate, updateTemplate } = useTemplateStore();
   const { clauses, loadClauses, incrementUsage } = useClauseStore();
@@ -98,6 +100,34 @@ export function TemplateEditor() {
     Message.success('模板已保存');
   };
 
+  // 重命名针对已落库的模板原子执行；正文或变量有未保存修改时先要求保存，
+  // 避免同步回来的持久化结果覆盖本地未保存编辑。
+  const openRenameModal = (variable: TemplateVariable) => {
+    const persisted = templates.find((item) => item.id === draft.id);
+    const hasUnsavedChanges =
+      !persisted ||
+      persisted.contentHtml !== draft.contentHtml ||
+      JSON.stringify(persisted.variables) !== JSON.stringify(draft.variables);
+
+    if (hasUnsavedChanges) {
+      Message.warning('模板有未保存的修改，请先保存再重命名变量');
+      return;
+    }
+
+    setRenamingVariable(variable);
+  };
+
+  const syncDraftAfterRename = () => {
+    const persisted = useTemplateStore.getState().templates.find((item) => item.id === draft.id);
+    if (!persisted) {
+      return;
+    }
+
+    updateDraft({ contentHtml: persisted.contentHtml, variables: persisted.variables });
+    // 重置正文历史，防止撤销把旧占位符带回正文
+    contentHistory.reset(persisted.contentHtml);
+  };
+
   return (
     <section className="page-section editor-page">
       <div className="page-heading">
@@ -147,8 +177,16 @@ export function TemplateEditor() {
           variables={draft.variables}
           onChange={(variables) => updateDraft({ variables })}
           onInsertPlaceholder={(name) => insertHtml(`<span> {{${name}}} </span>`)}
+          onRenameVariable={openRenameModal}
         />
       </div>
+
+      <RenameVariableModal
+        templateId={draft.id}
+        variable={renamingVariable}
+        onClose={() => setRenamingVariable(null)}
+        onRenamed={syncDraftAfterRename}
+      />
 
       <ClauseDrawer
         visible={clauseDrawerVisible}

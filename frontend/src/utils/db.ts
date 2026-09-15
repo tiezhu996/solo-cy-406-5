@@ -79,6 +79,20 @@ export async function clearStore(storeName: StoreName) {
   await db.clear(storeName);
 }
 
+/**
+ * 变量重命名的原子落库：模板与草稿实例在同一条 IndexedDB 事务中写入，
+ * 任一 put 失败都会中止整个事务，保证两处数据要么同时生效、要么都不生效。
+ */
+export async function persistVariableRename(template: Template, instances: ContractInstance[]) {
+  const db = await getDb();
+  const tx = db.transaction(['templates', 'instances'], 'readwrite');
+  await tx.objectStore('templates').put(template);
+  for (const instance of instances) {
+    await tx.objectStore('instances').put(instance);
+  }
+  await tx.done;
+}
+
 export async function exportAllData(): Promise<ExportPayload> {
   const [templates, clauses, instances, versions] = await Promise.all([
     getAllRecords('templates'),

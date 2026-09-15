@@ -2,8 +2,10 @@ import { create } from 'zustand';
 import { templateDb } from '../api/db';
 import { Template, TemplateDraft } from '../types/template';
 import { TemplateCategory } from '../types/enums';
-import { makeId, nowIso, putRecord } from '../utils/db';
+import { makeId, nowIso, persistVariableRename, putRecord } from '../utils/db';
+import { planVariableRename, RenameVariableOutcome } from '../utils/renameVariable';
 import { seedTemplates } from '../utils/seed';
+import { useInstanceStore } from './instance';
 
 interface TemplateHistory {
   past: Template[];
@@ -17,6 +19,7 @@ interface TemplateState {
   loadTemplates: () => Promise<void>;
   createTemplate: (draft?: Partial<TemplateDraft>) => Promise<Template>;
   updateTemplate: (template: Template, trackHistory?: boolean) => Promise<void>;
+  renameVariable: (templateId: string, variableId: string, newName: string) => Promise<RenameVariableOutcome>;
   deleteTemplate: (id: string) => Promise<void>;
   duplicateTemplate: (id: string) => Promise<Template | undefined>;
   undoTemplateChange: () => Promise<void>;
@@ -89,6 +92,30 @@ export const useTemplateStore = create<TemplateState>((set, get) => ({
             }
           : state.history
     }));
+  },
+
+  async renameVariable(templateId, variableId, newName) {
+    const template = get().templates.find((item) => item.id === templateId);
+    if (!template) {
+      return { ok: false, message: '模板不存在或已被删除' };
+    }
+
+    const plan = planVariableRename(template, useInstanceStore.getState().instances, variableId, newName);
+    if (!plan.ok) {
+      return { ok: false, message: plan.message };
+    }
+
+    try {
+      await persistVariableRename(plan.template, plan.instances);
+    } catch (error) {
+      console.error('变量重命名落库失败，本次操作未生效', error);
+      return { ok: false, message: '写入本地数据库失败，本次重命名未生效' };
+    }
+
+    // 落库成功后才更新内存状态；不记入模板 undo 历史（undo 无法回滚实例迁移）。
+    set((state) => ({ templates: upsertTemplate(state.templates, plan.template) }));
+    useInstanceStore.getState().applyMigratedInstances(plan.instances);
+    return { ok: true };
   },
 
   async deleteTemplate(id) {

@@ -262,6 +262,13 @@ body {
   gap: 8px;
 }
 
+.variable-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .instance-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(320px, 420px);

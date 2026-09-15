@@ -1,10 +1,7 @@
 import { useMemo } from 'react';
 import { Template } from '../types/template';
 import { VariableValues } from '../types/contract-instance';
-
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+import { buildPlaceholderPattern } from '../utils/placeholder';
 
 export function replaceVariables(template: Template | undefined, values: VariableValues) {
   if (!template) {
@@ -13,8 +10,7 @@ export function replaceVariables(template: Template | undefined, values: Variabl
 
   return template.variables.reduce((html, variable) => {
     const actualValue = values[variable.name] || variable.defaultValue || `{{${variable.name}}}`;
-    const pattern = new RegExp(`{{\\s*${escapeRegExp(variable.name)}\\s*}}`, 'g');
-    return html.replace(pattern, actualValue);
+    return html.replace(buildPlaceholderPattern(variable.name), actualValue);
   }, template.contentHtml);
 }
 

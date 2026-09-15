@@ -1,5 +1,5 @@
 import { Button, Card, Input, Select, Space, Switch, Typography } from '@arco-design/web-react';
-import { IconDelete, IconPlus } from '@arco-design/web-react/icon';
+import { IconDelete, IconEdit, IconPlus } from '@arco-design/web-react/icon';
 import { TemplateVariable } from '../../types/template';
 import { VARIABLE_TYPE_LABELS, VariableType } from '../../types/enums';
 import { makeId } from '../../utils/db';
@@ -8,6 +8,7 @@ interface VariablePanelProps {
   variables: TemplateVariable[];
   onChange: (variables: TemplateVariable[]) => void;
   onInsertPlaceholder: (name: string) => void;
+  onRenameVariable: (variable: TemplateVariable) => void;
 }
 
 const variableTypeOptions = Object.values(VariableType).map((type) => ({
@@ -15,7 +16,7 @@ const variableTypeOptions = Object.values(VariableType).map((type) => ({
   value: type
 }));
 
-export function VariablePanel({ variables, onChange, onInsertPlaceholder }: VariablePanelProps) {
+export function VariablePanel({ variables, onChange, onInsertPlaceholder, onRenameVariable }: VariablePanelProps) {
   const addVariable = () => {
     const index = variables.length + 1;
     onChange([
@@ -56,7 +57,12 @@ export function VariablePanel({ variables, onChange, onInsertPlaceholder }: Vari
           <Card key={variable.id} className="variable-item">
             <Space direction="vertical" size={8} style={{ width: '100%' }}>
               <Input value={variable.label} placeholder="显示名称" onChange={(label) => updateVariable(variable.id, { label })} />
-              <Input value={variable.name} placeholder="变量名" onChange={(name) => updateVariable(variable.id, { name })} />
+              <div className="variable-name-row">
+                <Typography.Text code>{`{{${variable.name}}}`}</Typography.Text>
+                <Button size="mini" icon={<IconEdit />} onClick={() => onRenameVariable(variable)}>
+                  重命名
+                </Button>
+              </div>
               <Select
                 value={variable.type}
                 options={variableTypeOptions}
