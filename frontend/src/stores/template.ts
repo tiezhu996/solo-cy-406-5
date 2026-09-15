@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { templateDb } from '../api/db';
+import { instanceDb, templateDb } from '../api/db';
 import { Template, TemplateDraft } from '../types/template';
 import { TemplateCategory } from '../types/enums';
 import { makeId, nowIso, persistVariableRename, putRecord } from '../utils/db';
@@ -100,7 +100,10 @@ export const useTemplateStore = create<TemplateState>((set, get) => ({
       return { ok: false, message: '模板不存在或已被删除' };
     }
 
-    const plan = planVariableRename(template, useInstanceStore.getState().instances, variableId, newName);
+    // 从持久层读取全部实例，而非内存中的实例 store：模板编辑器被直接打开或刷新后，
+    // 实例 store 可能尚未水合，从内存取数会漏迁已有草稿。
+    const instances = await instanceDb.list();
+    const plan = planVariableRename(template, instances, variableId, newName);
     if (!plan.ok) {
       return { ok: false, message: plan.message };
     }
