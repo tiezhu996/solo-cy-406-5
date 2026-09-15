@@ -11,17 +11,15 @@
  *   用 Promise.all 同时发起重命名，不做任何串行化；断言只有一个结果完整落库。
  * - 结束后删除测试数据库并验证清理完成。
  *
- * 运行：node tests/rename-transaction/run.mjs
- * 依赖：npm i --no-save playwright && npx playwright install chromium
- *       （Linux 缺系统库时先执行 tests/rename-transaction/setup-deps.sh）
+ * 运行：npm run test:rename（环境准备由 ensure-ready.mjs 自动完成，失败即退出非零）
  */
 import { build } from 'esbuild';
 import { createServer } from 'node:http';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chromium } from 'playwright';
+import { chromiumEnv, ensureReady } from './ensure-ready.mjs';
 
 const TEST_DIR = dirname(fileURLToPath(import.meta.url));
 const ROUNDS = 3;
@@ -99,21 +97,6 @@ function normalizeRecord(record) {
 }
 
 /* -------------------------------- 环境准备 -------------------------------- */
-
-function findDepsLib() {
-  // Debian usrmerge 布局下，库可能解压到 lib/usr/lib/<triplet> 或 lib/lib/<triplet>
-  const roots = [join(TEST_DIR, '.deps', 'lib', 'usr', 'lib'), join(TEST_DIR, '.deps', 'lib', 'lib')];
-  const dirs = [];
-  for (const base of roots) {
-    if (!existsSync(base)) {
-      continue;
-    }
-    for (const entry of readdirSync(base)) {
-      dirs.push(join(base, entry));
-    }
-  }
-  return dirs.length ? dirs.join(':') : undefined;
-}
 
 async function bundleDriver(outdir) {
   const outfile = join(outdir, 'driver.js');
@@ -363,6 +346,9 @@ async function scenarioConcurrency(browser, baseUrl, dbName) {
 /* --------------------------------- 主流程 --------------------------------- */
 
 async function main() {
+  // 环境准备：浏览器缺失/系统库缺失会自动补齐；准备失败直接抛错，测试不进入执行阶段
+  const chromium = await ensureReady();
+
   const workdir = mkdtempSync(join(tmpdir(), 'rename-tx-test-'));
   let browser;
   let server;
@@ -372,12 +358,7 @@ async function main() {
     const started = await startServer(bundlePath);
     server = started.server;
 
-    const env = { ...process.env };
-    const depsLib = findDepsLib();
-    if (depsLib) {
-      env.LD_LIBRARY_PATH = [depsLib, process.env.LD_LIBRARY_PATH].filter(Boolean).join(':');
-    }
-    browser = await chromium.launch({ env });
+    browser = await chromium.launch({ env: chromiumEnv() });
 
     // 预清理：保证套件可重复运行（上次异常退出不留残骸）
     const preClean = await browser.newPage();
